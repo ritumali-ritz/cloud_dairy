@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "274476681284",
+    "project_id": "clouddairy-74be2",
+    "storage_bucket": "clouddairy-74be2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:274476681284:android:7e9eff26c00ab70b03d411",
+        "android_client_info": {
+          "package_name": "com.example.cloud_dairy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVTWGcts0P4sDPOqlxZNor4wdLmaq7jvs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

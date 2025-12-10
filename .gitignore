@@ -1,3 +1,36 @@
+# Node
 node_modules/
 .env
+npm-debug.log
 .DS_Store
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.pub-cache/
+.pub/
+
+# Android
+.gradle/
+.idea/
+app/build/
+android/app/build/
+
+# iOS
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Pods/
+ios/Podfile.lock
+
+# Windows/Linux/Mac
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
