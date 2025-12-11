@@ -10,10 +10,12 @@ class RateChartScreen extends StatefulWidget {
 }
 
 class _RateChartScreenState extends State<RateChartScreen> {
+  String _selectedType = 'Cow';
+  bool _isEditing = false; // Toggle to show manual entry form
+
   final _fatCtrl = TextEditingController();
   final _snfCtrl = TextEditingController();
   final _rateCtrl = TextEditingController();
-  String _selectedType = 'Cow';
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _RateChartScreenState extends State<RateChartScreen> {
       _fatCtrl.clear();
       _snfCtrl.clear();
       _rateCtrl.clear();
+      setState(() => _isEditing = false);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
@@ -45,67 +48,128 @@ class _RateChartScreenState extends State<RateChartScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage Rate Chart')),
+      appBar: AppBar(
+        title: const Text('Rate Chart'),
+        actions: [
+          IconButton(
+            icon: Icon(_isEditing ? Icons.close : Icons.add),
+            onPressed: () => setState(() => _isEditing = !_isEditing),
+          )
+        ],
+      ),
       body: Consumer<AdminProvider>(
         builder: (context, provider, _) {
+          // Prepare Data for Matrix
+          final rates = provider.rates;
+          
+          // Extract unique Fats and SNFs sorted
+          final Set<double> fatsSet = {};
+          final Set<double> snfsSet = {};
+          final Map<String, double> rateMap = {}; // key: "fat_snf" -> rate
+
+          for (var r in rates) {
+            double f = (r['fat'] as num).toDouble();
+            double s = (r['snf'] as num).toDouble();
+            fatsSet.add(f);
+            snfsSet.add(s);
+            rateMap['${f}_$s'] = (r['rate'] as num).toDouble();
+          }
+
+          final fats = fatsSet.toList()..sort();
+          final snfs = snfsSet.toList()..sort();
+
           return Column(
             children: [
-              // Input Section
-              Card(
-                margin: const EdgeInsets.all(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        value: _selectedType,
-                        items: const [
-                          DropdownMenuItem(value: 'Cow', child: Text('Cow')),
-                          DropdownMenuItem(value: 'Buffalo', child: Text('Buffalo')),
+              // Type Selector
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                     Expanded(
+                       child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'Cow', label: Text('Cow'), icon: Icon(Icons.grass)),
+                          ButtonSegment(value: 'Buffalo', label: Text('Buffalo'), icon: Icon(Icons.water_drop)), // Buffalo icon proxy
                         ],
-                        onChanged: (val) {
-                          setState(() => _selectedType = val!);
+                        selected: {_selectedType},
+                        onSelectionChanged: (Set<String> newSelection) {
+                          setState(() => _selectedType = newSelection.first);
                           provider.fetchRates(_selectedType);
                         },
-                        decoration: const InputDecoration(labelText: 'Milk Type'),
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: TextFormField(controller: _fatCtrl, decoration: const InputDecoration(labelText: 'Fat'), keyboardType: TextInputType.number)),
-                          const SizedBox(width: 16),
-                          Expanded(child: TextFormField(controller: _snfCtrl, decoration: const InputDecoration(labelText: 'SNF'), keyboardType: TextInputType.number)),
-                          const SizedBox(width: 16),
-                          Expanded(child: TextFormField(controller: _rateCtrl, decoration: const InputDecoration(labelText: 'Rate'), keyboardType: TextInputType.number)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: provider.isLoading ? null : _submit,
-                        child: const Text('Set Rate'),
-                      ),
-                    ],
-                  ),
+                     ),
+                  ],
                 ),
               ),
-              const Divider(),
-              // List Section
-              Expanded(
-                child: provider.isLoading 
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: provider.rates.length,
-                      separatorBuilder: (_, __) => const Divider(),
-                      itemBuilder: (context, index) {
-                        final rate = provider.rates[index];
-                        return ListTile(
-                          title: Text('Fat: ${rate['fat']} | SNF: ${rate['snf']}'),
-                          trailing: Text('\u20B9 ${rate['rate']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
-                        );
-                      },
+
+              if (_isEditing)
+                Card(
+                  margin: const EdgeInsets.all(16),
+                  color: Colors.green[50],
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        const Text("Add / Update Single Rate", style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(child: TextFormField(controller: _fatCtrl, decoration: const InputDecoration(labelText: 'Fat'), keyboardType: TextInputType.number)),
+                            const SizedBox(width: 8),
+                            Expanded(child: TextFormField(controller: _snfCtrl, decoration: const InputDecoration(labelText: 'SNF'), keyboardType: TextInputType.number)),
+                            const SizedBox(width: 8),
+                            Expanded(child: TextFormField(controller: _rateCtrl, decoration: const InputDecoration(labelText: 'Rate'), keyboardType: TextInputType.number)),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(onPressed: provider.isLoading ? null : _submit, child: const Text("Save Rate"))
+                      ],
                     ),
+                  ),
+                ),
+
+              // Matrix View
+              Expanded(
+                child: provider.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : rates.isEmpty
+                        ? const Center(child: Text("No rates found. Add one to start."))
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: DataTable(
+                                border: TableBorder.all(color: Colors.grey[300]!),
+                                headingRowColor: MaterialStateProperty.all(Colors.green[100]),
+                                columns: [
+                                  const DataColumn(label: Text('Fat / SNF', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  ...snfs.map((s) => DataColumn(label: Text(s.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold)))),
+                                ],
+                                rows: fats.map((fat) {
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text(fat.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                      ...snfs.map((snf) {
+                                        final r = rateMap['${fat}_${snf}'];
+                                        return DataCell(
+                                          Text(r != null ? r.toStringAsFixed(2) : '-'),
+                                          onTap: () {
+                                            // Pre-fill edit form
+                                            setState(() {
+                                              _isEditing = true;
+                                              _fatCtrl.text = fat.toString();
+                                              _snfCtrl.text = snf.toString();
+                                              _rateCtrl.text = r?.toString() ?? '';
+                                            });
+                                          },
+                                        );
+                                      }),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
               ),
             ],
           );

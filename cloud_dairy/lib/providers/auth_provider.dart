@@ -10,7 +10,7 @@ class AuthProvider with ChangeNotifier {
   String? _errorMessage;
 
   bool get isLoading => _isLoading;
-  bool get isAuthenticated => _firebaseService.currentUser != null && _currentUser != null;
+  bool get isAuthenticated => _currentUser != null;
   bool get needsSetup => _needsSetup;
   String? get role => _currentUser?['role'];
   Map<String, dynamic>? get user => _currentUser?['profile'];
@@ -43,9 +43,11 @@ class AuthProvider with ChangeNotifier {
     // Check Admin
     final adminDoc = await _firebaseService.getAdminProfile(uid);
     if (adminDoc.exists) {
+      final data = adminDoc.data() as Map<String, dynamic>;
+      data['id'] = uid; // Inject ID
       _currentUser = {
         'role': 'admin',
-        'profile': adminDoc.data(),
+        'profile': data,
       };
       notifyListeners();
       return;
@@ -54,9 +56,11 @@ class AuthProvider with ChangeNotifier {
     // Check Farmer
     final farmerDoc = await _firebaseService.getFarmerProfile(uid);
     if (farmerDoc.exists) {
+      final data = farmerDoc.data() as Map<String, dynamic>;
+      data['id'] = uid; // Inject ID
       _currentUser = {
         'role': 'farmer',
-        'profile': farmerDoc.data(),
+        'profile': data,
       };
       notifyListeners();
       return;
@@ -73,23 +77,51 @@ class AuthProvider with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      // Use email-like format for simplicity: phone@admin.dairy
       final email = '$phone@admin.dairy';
-      final cred = await _firebaseService.registerAdmin(email, password);
+      UserCredential cred;
       
-      final profile = {
-        'username': adminName,
-        'phone': phone,
-        'dairyName': dairyName,
-        'role': 'admin',
-        'createdAt': DateTime.now().toIso8601String(),
-      };
-
-      await _firebaseService.saveAdminProfile(cred.user!.uid, profile);
+      try {
+        cred = await _firebaseService.registerAdmin(email, password);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          // Recover: Try signing in with the provided password
+          try {
+            cred = await _firebaseService.signInAdmin(email, password);
+          } catch (signInError) {
+             throw "Phone number already registered. Please Login.";
+          }
+        } else {
+          rethrow;
+        }
+      } catch (e) {
+        rethrow;
+      }
+      
+      // We have a user (new or recovered). Check profile.
+      final existingDoc = await _firebaseService.getAdminProfile(cred.user!.uid);
+      
+      Map<String, dynamic> profileData;
+      
+      if (existingDoc.exists) {
+        // Profile already exists, just load it
+        profileData = existingDoc.data() as Map<String, dynamic>;
+      } else {
+        // Create new profile
+        profileData = {
+          'username': adminName,
+          'phone': phone,
+          'dairyName': dairyName,
+          'role': 'admin',
+          'createdAt': DateTime.now().toIso8601String(),
+        };
+        await _firebaseService.saveAdminProfile(cred.user!.uid, profileData);
+      }
+      
+      profileData['id'] = cred.user!.uid; // Inject ID
 
       _currentUser = {
         'role': 'admin',
-        'profile': profile,
+        'profile': profileData,
       };
     } catch (e) {
       _errorMessage = e.toString();
@@ -110,13 +142,18 @@ class AuthProvider with ChangeNotifier {
       // If user types 'admin', we have a problem unless we stored it.
       // Let's assume username input is the phone number for now as per previous schema.
       
-      String email = username;
-      if (!username.contains('@')) {
-        email = '$username@admin.dairy';
+      print("LoginAdmin: Attempting login for $username");
+      String email = username.trim();
+      if (!email.contains('@')) {
+        email = '$email@admin.dairy';
       }
+      print("LoginAdmin: Constructed email: $email");
 
       final cred = await _firebaseService.signInAdmin(email, password);
+      print("LoginAdmin: FirebaseAuth check passed for ${cred.user!.uid}");
+      
       await _fetchUserProfile(cred.user!.uid);
+      print("LoginAdmin: Profile fetched. Role: ${_currentUser?['role']}");
       
       if (_currentUser == null || _currentUser!['role'] != 'admin') {
          await _firebaseService.signOut();
@@ -132,23 +169,80 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Temporary using Email/Pass for Farmer too (phone@farmer.dairy)
   Future<void> loginFarmer(String phone, String password) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final email = '$phone@farmer.dairy';
-      final cred = await _firebaseService.signInAdmin(email, password); // Reusing signIn method
-       await _fetchUserProfile(cred.user!.uid);
-
-      if (_currentUser == null || _currentUser!['role'] != 'farmer') {
-         await _firebaseService.signOut();
-         throw "Not a farmer account";
+      print("LoginFarmer: Attempting login for $phone");
+      // Direct Firestore check (Legacy/Offline-style Migration)
+      // Since Admin creates farmers in Firestore but NOT in Auth, we authenticate against the doc.
+      final query = await _firebaseService.getFarmerByPhone(phone.trim());
+      print("LoginFarmer: Query result count: ${query.docs.length}");
+      
+      if (query.docs.isEmpty) {
+        throw "Farmer not found";
       }
+      
+      final doc = query.docs.first;
+      final data = doc.data() as Map<String, dynamic>;
+      print("LoginFarmer: Found farmer doc ${doc.id}");
+      
+      if (data['password'] != password) {
+        throw "Invalid Password";
+      }
+
+      // Inject ID into profile data so UI can access it via user['id']
+      data['id'] = doc.id;
+
+      // Success - Manually set user state without Firebase Auth User
+      // Note: This means currentUser will be null in FirebaseService, but we handle it here.
+      _currentUser = {
+        'role': 'farmer',
+        'profile': data,
+        'uid': doc.id, // Store doc ID as UID
+      };
+      print("LoginFarmer: Login Successful. User: $_currentUser");
+      
+      // Notify listeners to update UI
     } catch (e) {
       _errorMessage = e.toString();
       rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> resetPassword(String username, String phone, String newPassword) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      // Logic: For simplicity in this migration, we are just updating the password directly if the user is authenticated?
+      // No, password reset usually happens when logged out.
+      // With Firebase Auth, we usually send a reset email. 
+      // But here the user provides a 'New Password'. 
+      // Admin intervention or re-authenticating with phone OTP is standard.
+      // Given the requirement "username, phone, newPassword", it sounds like a self-reset.
+      // Since we don't have OTP setup, we can't securely verify this without email.
+      // Workaround for MVP migration:
+      // If we used Email Auth (phone@admin.dairy), we can use sendPasswordResetEmail.
+      // But we can't set the new password directly without current auth.
+      
+      // Let's implement sendPasswordResetEmail logic instead, or throw error saying "Contact Admin".
+      // OR hacky: if we stored plaintext password in Firestore (we did for legacy match), we can update that doc.
+      // But that doesn't update Firebase Auth password.
+      
+      // Recommendation: Trigger email reset.
+      final email = '$phone@admin.dairy'; 
+      await _firebaseService.sendPasswordResetEmail(email);
+      _errorMessage = "Password reset email sent to $email";
+      return true;
+
+    } catch (e) {
+      _errorMessage = "Reset failed: $e";
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();

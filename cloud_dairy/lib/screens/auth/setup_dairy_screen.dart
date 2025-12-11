@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-// import '../admin/admin_dashboard.dart'; // Handled by AuthWrapper or main navigation
+import '../admin/admin_dashboard.dart';
 
 class SetupDairyScreen extends StatefulWidget {
   const SetupDairyScreen({super.key});
@@ -42,7 +42,9 @@ class _SetupDairyScreenState extends State<SetupDairyScreen> {
           _phoneCtrl.text.trim(),
           _passCtrl.text.trim(),
         );
-        // Navigation is typically handled by the AuthWrapper based on auth state change
+        if (mounted) {
+           // Navigation handled by AuthWrapper
+        }
       } catch (e) {
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));

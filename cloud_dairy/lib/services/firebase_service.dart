@@ -23,6 +23,11 @@ class FirebaseService {
     return await _auth.createUserWithEmailAndPassword(email: email, password: password);
   }
 
+  // Password Reset
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
   // Sign Out
   Future<void> signOut() async {
     await _auth.signOut();
@@ -41,6 +46,10 @@ class FirebaseService {
   // Get Wallet (Real-time stream preferred check, but future for now)
   Future<DocumentSnapshot> getFarmerWallet(String uid) {
     return _firestore.collection('farmers').doc(uid).get();
+  }
+
+  Future<QuerySnapshot> getFarmerByPhone(String phone) {
+    return _firestore.collection('farmers').where('phone', isEqualTo: phone).get();
   }
 
   // Get Collections

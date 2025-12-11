@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import 'forgot_password_screen.dart';
+import 'setup_dairy_screen.dart';
+import '../admin/admin_dashboard.dart';
+import '../farmer/farmer_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -46,6 +49,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           _adminUserCtrl.text.trim(),
           _adminPassCtrl.text.trim(),
         );
+        if (!mounted) return;
+        // Navigation handled by AuthWrapper
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -62,6 +67,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           _farmerPhoneCtrl.text.trim(),
           _farmerPassCtrl.text.trim(),
         );
+        if (!mounted) return;
+        // Navigation handled by AuthWrapper
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -230,6 +237,31 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
+                
+                // New User / Setup Dairy
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("New here? "),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context, 
+                          MaterialPageRoute(builder: (_) => const SetupDairyScreen())
+                        );
+                      },
+                      child: const Text(
+                        "Setup New Dairy",
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),

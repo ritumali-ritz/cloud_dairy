@@ -48,7 +48,6 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
             icon: const Icon(Icons.logout),
             onPressed: () {
                context.read<AuthProvider>().logout();
-               Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
             },
           ),
         ],
